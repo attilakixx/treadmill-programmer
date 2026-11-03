@@ -37,16 +37,14 @@ final class Workout {
         if (name.length() > 80) throw new IllegalArgumentException("A név legfeljebb 80 karakter lehet.");
         String[] lines = csv.replace("\uFEFF", "").split("\\R");
         List<Step> result = new ArrayList<>();
-        boolean headerSeen = false;
+        boolean firstLineSeen = false;
         long total = 0;
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i].trim();
             if (line.isEmpty()) continue;
-            if (!headerSeen) {
-                if (!line.replace(" ", "").equalsIgnoreCase("timeInterval(min),speed(kmph)"))
-                    throw new IllegalArgumentException("Az első sor legyen: timeInterval(min),speed(kmph)");
-                headerSeen = true;
-                continue;
+            if (!firstLineSeen) {
+                firstLineSeen = true;
+                if (line.replace(" ", "").equalsIgnoreCase("timeInterval(min),speed(kmph)")) continue;
             }
             String[] values = line.split(",", -1);
             if (values.length != 2) throw new IllegalArgumentException((i + 1) + ". sor: két, vesszővel elválasztott szám kell.");
@@ -93,6 +91,14 @@ final class Workout {
         int maximum = 0;
         for (Step step : steps) maximum = Math.max(maximum, step.speedHundredths);
         return String.format(Locale.ROOT, "%.2f", maximum / 100.0);
+    }
+
+    String estimatedDistanceLabel() {
+        long speedTime = 0;
+        for (Step step : steps) speedTime += (long) step.speedHundredths * step.durationMs;
+        return BigDecimal.valueOf(speedTime)
+            .divide(BigDecimal.valueOf(360_000_000L), 2, RoundingMode.HALF_UP)
+            .toPlainString();
     }
 
     boolean samePlan(Workout other) {

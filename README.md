@@ -2,21 +2,33 @@
 
 Egyszerű Android alkalmazás Bluetooth FTMS futópadhoz. A futópadot a konzolon kell elindítani. Az alkalmazás kizárólag a célsebességet állítja a kiválasztott program alapján.
 
-Az alkalmazás fekete-sárga PaceLab felületet és saját futópad ikont használ. [Képernyőkép mintaprogrammal](docs/pacelab-preview.png).
+Az alkalmazás fekete-sárga PaceLab felületet és saját futópad ikont használ. [Főképernyő kedvencekkel](docs/pacelab-preview.png), [programkönyvtár](docs/program-library-preview.png), [Bluetooth-beállítások](docs/bluetooth-settings-preview.png).
 
 ## Használat
 
 1. Telepítsd a [POC APK-t](dist/treadmill-programmer-poc.apk) Android 16 telefonra, vagy nyisd meg a projektet Android Studióban és futtasd a telefonon.
-2. Írj UTF-8 CSV fájlt a számítógépen az [examples/intervals.csv](examples/intervals.csv) mintájára. A fejléc kötelező. Az idő percben, a sebesség km/h-ban értendő; tizedeshez pontot használj.
-3. Másold a fájlt a telefonra. Az alkalmazásban válaszd a **CSV fájl kiválasztása** gombot, adj neki nevet és mentsd el. A mentett programok között bármikor válthatsz; mindegyiknél látszik a diagram, a hossz és a legnagyobb sebesség. Az importált CSV tartalmát is megőrzi az app.
-4. A **Bluetooth eszközök keresése** gombbal válaszd ki a futópadot. Az app a hirdetett nevet, az FTMS-jelzést (ha a hirdetésben szerepel), a Bluetooth-címet és a jelerősséget mutatja. A sikeres csatlakozást megjegyzi, és az app későbbi megnyitásakor automatikusan próbál csatlakozni. Ha a készülék Bluetooth-címe megváltozik, válaszd ki újra kézzel. Más, futópadhoz kapcsolódó alkalmazást zárj be.
-5. A futópadot indítsd el a saját konzolján. Ezután nyomd meg a **Program indítása** gombot.
+2. Írj UTF-8 CSV fájlt a számítógépen az [examples/intervals.csv](examples/intervals.csv) mintájára. A fejléc elhagyható. Az idő percben, a sebesség km/h-ban értendő; tizedeshez pontot használj.
+3. Másold a fájlt a telefonra. Nyisd meg a **Programkönyvtárat**, válaszd a **CSV program importálása** gombot, adj neki nevet és mentsd el. A választó a `Download/treadmill` mappát próbálja először megnyitni. Ha a fájlválasztó nem mutatja a CSV-t, a telefon Fájlkezelőjében válaszd ki a fájlt, majd **Megosztás → PaceLab**. A mentett programok és a kilenc beépített preset itt választhatók ki; mindegyiknél látszik a diagram, a hossz, a legnagyobb sebesség és a becsült távolság. A ☆ gombbal jelölt kedvencek a főképernyőn is megjelennek. A választást és a kedvenceket az app megjegyzi. Az importált CSV tartalmát is megőrzi.
+4. A jobb felső **fogaskerékkel** vagy a kapcsolatkártya **Bluetooth beállítások** gombjával nyisd meg a külön eszközmenüt. Ott a **Bluetooth eszközök keresése** gombbal válaszd ki a futópadot. Az app a hirdetett nevet, az FTMS-jelzést (ha a hirdetésben szerepel), a Bluetooth-címet és a jelerősséget mutatja. A sikeres csatlakozást megjegyzi, és az app későbbi megnyitásakor automatikusan próbál csatlakozni. Ha a készülék Bluetooth-címe megváltozik, válaszd ki újra kézzel. Más, futópadhoz kapcsolódó alkalmazást zárj be.
+5. A futópadot indítsd el a saját konzolján. Ezután nyomd meg az **Edzés indítása** gombot.
+
+## Beépített edzések
+
+| Típus | Könnyű | Közepes | Nehéz |
+| --- | --- | --- | --- |
+| Kalória | 30 perc, max. 5 km/h | 35 perc, max. 7 km/h | 40 perc, max. 9 km/h |
+| Intervallum | 22 perc, max. 6,5 km/h | 26 perc, max. 8 km/h | 30 perc, max. 10,5 km/h |
+| Állóképesség | 25 perc, max. 5 km/h | 40 perc, max. 7 km/h | 50 perc, max. 8 km/h |
+
+Mind a kilenc program 5 perc könnyű bemelegítéssel és 5 perc levezetéssel kezdődik, illetve végződik. Az intervallumprogramok gyorsabb és lassabb szakaszokat váltogatnak; az állóképességi programok tartósabb, egyenletes tempót használnak. Ez a felépítés az [NHS Couch to 5K](https://www.nhs.uk/better-health/get-active/get-running-with-couch-to-5k/couch-to-5k-running-plan/) kezdő futóprogram mintáját követi. A „kalória” kategória hosszabb, változó tempójú mozgást jelent, nem meghatározott kalóriaégetési ígéretet. A nehézségi szint egyéni: a [CDC beszédtesztje](https://www.cdc.gov/physical-activity-basics/measuring/index.html) segíthet megítélni a terhelést. Az app indításkor ellenőrzi, hogy a futópad által jelzett sebességtartomány és lépésköz minden szakaszt támogat-e.
 
 Az alkalmazás a szakasz elején elküldi a célsebességet, és az FTMS válasz után indítja a szakasz időzítőjét. A parancs elutasítása vagy a kapcsolat megszakadása leállítja az automatikus programot. A program vége, illetve az alkalmazás **Leállítás** gombja **nem állítja le a futópad szalagját**: azt a konzolon vagy a biztonsági kulccsal kell megtenni.
 
+A becsült távolságot az egyes szakaszok célsebessége és időtartama alapján számolja az app. A futópad ténylegesen megtett távolsága a sebességváltások és a kézi beavatkozás miatt eltérhet.
+
 ## CSV szabályok
 
-- Fejléc: `timeInterval(min),speed(kmph)`
+- Opcionális fejléc: `timeInterval(min),speed(kmph)`
 - Egy sor: pozitív idő percben, majd 0-nál nagyobb, legfeljebb 25 km/h sebesség.
 - Legfeljebb 8 órás program és 256 KB-os fájl importálható.
 - A futópad által jelzett sebességtartományt és lépésközt az alkalmazás indítás előtt ellenőrzi.

@@ -22,6 +22,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.SystemClock;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 public final class TreadmillService extends Service {
@@ -37,7 +39,7 @@ public final class TreadmillService extends Service {
     private String deviceAddress;
     private boolean automaticConnection;
     private BluetoothGattCharacteristic control;
-    private Listener listener;
+    private final Set<Listener> listeners = new HashSet<>();
     private String state = "Nincs kapcsolat";
     private boolean ready, running, controlGranted, featureSupported, rangeAvailable;
     private int minSpeed, maxSpeed, speedStep, pendingOpcode = -1, stepIndex;
@@ -59,8 +61,8 @@ public final class TreadmillService extends Service {
         if (intent != null && STOP.equals(intent.getAction())) { stopWorkout("Program leállítva. A futópadot a konzolon állítsd le."); stopSelf(); }
         return START_NOT_STICKY;
     }
-    void setListener(Listener listener) { this.listener = listener; publish(); }
-    void clearListener(Listener listener) { if (this.listener == listener) this.listener = null; }
+    void addListener(Listener listener) { listeners.add(listener); publish(); }
+    void removeListener(Listener listener) { listeners.remove(listener); }
     boolean isReady() { return ready; }
     boolean isRunning() { return running; }
     Workout currentWorkout() { return workout; }
@@ -70,6 +72,8 @@ public final class TreadmillService extends Service {
     boolean hasRange() { return rangeAvailable; }
     boolean isConnecting() { return gatt != null; }
     boolean hasRememberedDevice() { return getSharedPreferences(DEVICE_PREFS, MODE_PRIVATE).contains(ADDRESS_KEY); }
+    String rememberedDeviceName() { return getSharedPreferences(DEVICE_PREFS, MODE_PRIVATE).getString(NAME_KEY, "Mentett futópad"); }
+    String rememberedDeviceAddress() { return getSharedPreferences(DEVICE_PREFS, MODE_PRIVATE).getString(ADDRESS_KEY, null); }
 
     void connect(BluetoothDevice device, String displayName) {
         connect(device, displayName, false);
@@ -119,8 +123,8 @@ public final class TreadmillService extends Service {
                         state = "Várakozás a mentett futópadra: " + deviceName; publish();
                     } else {
                         source.close(); gatt = null; state = "Kapcsolat megszakadt"; publish();
-                        if (!automaticConnection && listener != null && hasRememberedDevice()) handler.postDelayed(() -> {
-                            if (gatt == null && listener != null) connectRemembered();
+                        if (!automaticConnection && !listeners.isEmpty() && hasRememberedDevice()) handler.postDelayed(() -> {
+                            if (gatt == null && !listeners.isEmpty()) connectRemembered();
                         }, 2000);
                     }
                 }
@@ -188,7 +192,8 @@ public final class TreadmillService extends Service {
     private static int u16(byte[] bytes, int offset) { return (bytes[offset] & 255) | ((bytes[offset + 1] & 255) << 8); }
     private void fail(String message) { stopWorkout(message); ready = false; state = message; publish(); }
     private void publish() {
-        if (listener != null) listener.onState(state, ready, running, stepIndex, running && pendingOpcode == -1 ? Math.max(0, stepEndsAt - SystemClock.elapsedRealtime()) : 0);
+        long remaining = running && pendingOpcode == -1 ? Math.max(0, stepEndsAt - SystemClock.elapsedRealtime()) : 0;
+        for (Listener listener : listeners) listener.onState(state, ready, running, stepIndex, remaining);
     }
     private void clearTimeout() { if (timeout != null) handler.removeCallbacks(timeout); timeout = null; }
     private void send(byte[] bytes) {

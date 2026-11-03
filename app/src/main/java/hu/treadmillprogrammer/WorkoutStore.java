@@ -18,14 +18,16 @@ final class WorkoutStore {
         directory = new File(context.getFilesDir(), "programs");
         if (!directory.exists() && !directory.mkdirs()) throw new IllegalStateException("Nem hozható létre a programkönyvtár.");
     }
-    void save(Workout workout, String sourceCsv) throws Exception {
-        File file = new File(directory, UUID.randomUUID() + ".json");
+    String save(Workout workout, String sourceCsv) throws Exception {
+        String id = UUID.randomUUID().toString();
+        File file = new File(directory, id + ".json");
         try (FileOutputStream output = new FileOutputStream(file)) {
             output.write(workout.toJson().put("sourceCsv", sourceCsv).toString().getBytes(StandardCharsets.UTF_8));
         }
+        return id;
     }
-    List<Workout> load() throws Exception {
-        List<Workout> programs = new ArrayList<>();
+    List<ProgramEntry> load() throws Exception {
+        List<ProgramEntry> programs = new ArrayList<>();
         File[] files = directory.listFiles((dir, name) -> name.endsWith(".json"));
         if (files != null) for (File file : files) {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -34,9 +36,10 @@ final class WorkoutStore {
                 int count;
                 while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
             }
-            programs.add(Workout.fromJson(new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8))));
+            String id = file.getName().substring(0, file.getName().length() - 5);
+            programs.add(new ProgramEntry(id, Workout.fromJson(new JSONObject(new String(bytes.toByteArray(), StandardCharsets.UTF_8))), "SAJÁT PROGRAM", "", false, false));
         }
-        programs.sort(Comparator.comparing(w -> w.name.toLowerCase()));
+        programs.sort(Comparator.comparing(w -> w.workout.name.toLowerCase(java.util.Locale.ROOT)));
         return programs;
     }
 }

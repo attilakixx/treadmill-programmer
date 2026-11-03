@@ -12,6 +12,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".BluetoothSettingsActivity" android:exported="false" android:parentActivityName=".MainActivity" />
+        <activity android:name=".ProgramsActivity" android:exported="true" android:parentActivityName=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/csv" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
         <service android:name=".TreadmillService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>
