@@ -23,6 +23,7 @@
                 <data android:mimeType="application/octet-stream" />
             </intent-filter>
         </activity>
+        <activity android:name=".LiveControlActivity" android:exported="false" android:parentActivityName=".MainActivity" />
         <service android:name=".TreadmillService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

@@ -45,6 +45,10 @@ public final class TreadmillService extends Service {
     private int minSpeed, maxSpeed, speedStep, pendingOpcode = -1, stepIndex;
     private Workout workout;
     private long stepEndsAt;
+    private boolean liveSession, liveStarted;
+    private int liveSpeed, pendingLiveSpeed, liveMaxSpeed, liveSpeedChanges;
+    private long sessionStartedAt, liveSegmentAt, liveSpeedTime;
+    private double liveMetTime;
     private Runnable timeout;
     private final Runnable tick = new Runnable() {
         @Override public void run() {
@@ -66,6 +70,11 @@ public final class TreadmillService extends Service {
     boolean isReady() { return ready; }
     boolean isRunning() { return running; }
     Workout currentWorkout() { return workout; }
+    boolean isLiveSession() { return liveSession; }
+    int liveSpeed() { return liveSpeed; }
+    boolean commandPending() { return pendingOpcode != -1; }
+    boolean supportsSpeed(int speed) { return validSpeed(speed); }
+    long liveElapsedMs() { return liveSession && liveStarted ? SystemClock.elapsedRealtime() - sessionStartedAt : 0; }
     int minSpeed() { return minSpeed; }
     int maxSpeed() { return maxSpeed; }
     int speedStep() { return speedStep; }
@@ -180,11 +189,14 @@ public final class TreadmillService extends Service {
                 if (opcode != pendingOpcode) return;
                 clearTimeout(); pendingOpcode = -1;
                 if (result != 1) { fail("FTMS parancs elutasítva (" + opcode + ", kód " + result + ")."); return; }
-                if (opcode == 0) { controlGranted = true; sendSpeed(); }
+                if (opcode == 0) { controlGranted = true; if (liveSession) sendLiveSpeed(); else sendSpeed(); }
                 else if (opcode == 2) {
-                    stepEndsAt = SystemClock.elapsedRealtime() + workout.steps.get(stepIndex).durationMs;
-                    state = "Fut: " + (stepIndex + 1) + "/" + workout.steps.size() + ". szakasz, " + workout.steps.get(stepIndex).speedLabel() + " km/h";
-                    publish(); handler.post(tick);
+                    if (liveSession) acceptLiveSpeed();
+                    else {
+                        stepEndsAt = SystemClock.elapsedRealtime() + workout.steps.get(stepIndex).durationMs;
+                        state = "Fut: " + (stepIndex + 1) + "/" + workout.steps.size() + ". szakasz, " + workout.steps.get(stepIndex).speedLabel() + " km/h";
+                        publish(); handler.post(tick);
+                    }
                 }
             });
         }
@@ -211,15 +223,82 @@ public final class TreadmillService extends Service {
                 publish(); return;
             }
         }
-        workout = selected; stepIndex = 0; running = true;
+        workout = selected; liveSession = false; stepIndex = 0; running = true;
+        startForegroundNotification("Programvezérlés aktív; a futópadot a konzolon állítsd le.");
+        state = "Vezérlés kérése"; publish();
+        if (controlGranted) sendSpeed(); else send(new byte[]{0});
+    }
+    private void startForegroundNotification(String message) {
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Futópad edzés", NotificationManager.IMPORTANCE_LOW));
         Intent stop = new Intent(this, TreadmillService.class).setAction(STOP);
         PendingIntent stopIntent = PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification notification = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("Futópad program fut").setContentText("Sebességvezérlés aktív; a futópadot a konzolon állítsd le.").addAction(android.R.drawable.ic_media_pause, "Program leállítása", stopIntent).build();
+        Notification notification = new Notification.Builder(this, CHANNEL).setSmallIcon(android.R.drawable.ic_media_play).setContentTitle("PaceLab edzés fut").setContentText(message).addAction(android.R.drawable.ic_media_pause, "Vezérlés leállítása", stopIntent).build();
         startForeground(1, notification);
-        state = "Vezérlés kérése"; publish();
-        if (controlGranted) sendSpeed(); else send(new byte[]{0});
+    }
+    void startLiveSession(int initialSpeed) {
+        if (!ready || running || !featureSupported || !validSpeed(initialSpeed)) return;
+        workout = null; liveSession = true; liveStarted = false; running = true;
+        liveSpeed = pendingLiveSpeed = liveMaxSpeed = liveSpeedChanges = 0;
+        liveSpeedTime = 0; liveMetTime = 0; sessionStartedAt = liveSegmentAt = 0;
+        startForegroundNotification("Élő sebességvezérlés aktív; a szalagot a konzolon állítsd le.");
+        state = "Élő vezérlés indul"; publish();
+        pendingLiveSpeed = initialSpeed;
+        if (controlGranted) sendLiveSpeed(); else send(new byte[]{0});
+    }
+    boolean setLiveSpeed(int speed) {
+        if (!running || !liveSession || pendingOpcode != -1 || !validSpeed(speed)) return false;
+        pendingLiveSpeed = speed; sendLiveSpeed(); return true;
+    }
+    private boolean validSpeed(int speed) {
+        return rangeAvailable && speed >= minSpeed && speed <= maxSpeed && (speed - minSpeed) % speedStep == 0;
+    }
+    private void sendLiveSpeed() {
+        if (!liveSession || !running) return;
+        state = "Sebesség beállítása: " + String.format(java.util.Locale.ROOT, "%.2f", pendingLiveSpeed / 100.0) + " km/h"; publish();
+        send(new byte[]{2, (byte) pendingLiveSpeed, (byte) (pendingLiveSpeed >> 8)});
+    }
+    private void acceptLiveSpeed() {
+        long now = SystemClock.elapsedRealtime();
+        if (!liveStarted) { liveStarted = true; sessionStartedAt = now; }
+        else if (liveSpeed > 0) {
+            long duration = now - liveSegmentAt;
+            liveSpeedTime += (long) liveSpeed * duration;
+            liveMetTime += metForSpeed(liveSpeed) * duration;
+            if (liveSpeed != pendingLiveSpeed) liveSpeedChanges++;
+        }
+        liveSpeed = pendingLiveSpeed; liveMaxSpeed = Math.max(liveMaxSpeed, liveSpeed); liveSegmentAt = now;
+        state = "Élő vezérlés • " + String.format(java.util.Locale.ROOT, "%.2f", liveSpeed / 100.0) + " km/h"; publish();
+    }
+    private double metForSpeed(int speed) {
+        double kmh = speed / 100.0;
+        if (kmh < 1.9) return 2.1;
+        if (kmh < 3.2) return 2.8;
+        if (kmh < 4.0) return 3.0;
+        if (kmh < 4.8) return 3.5;
+        if (kmh < 5.6) return 3.8;
+        if (kmh < 6.4) return 4.8;
+        if (kmh < 7.2) return 5.8;
+        if (kmh < 8.0) return 6.8;
+        if (kmh < 8.9) return 8.3;
+        if (kmh < 9.7) return 8.3;
+        if (kmh < 11.3) return 9.8;
+        if (kmh < 12.9) return 11.0;
+        return 11.8;
+    }
+    SessionStats finishLiveSession(double weightKg) {
+        if (!liveSession || !running || !liveStarted) return null;
+        long now = SystemClock.elapsedRealtime();
+        long finalSegment = Math.max(0, now - liveSegmentAt);
+        liveSpeedTime += (long) liveSpeed * finalSegment;
+        liveMetTime += metForSpeed(liveSpeed) * finalSegment;
+        long elapsed = Math.max(1, now - sessionStartedAt);
+        double km = liveSpeedTime / 360_000_000.0;
+        double average = km * 3_600_000.0 / elapsed;
+        double calories = liveMetTime * weightKg / 3_600_000.0;
+        SessionStats stats = new SessionStats(elapsed, km, average, liveSpeed == 0 ? liveMaxSpeed : Math.max(liveMaxSpeed, liveSpeed), calories, liveSpeedChanges);
+        running = false; liveSession = false; liveStarted = false; liveSpeed = 0; stopForeground(STOP_FOREGROUND_REMOVE);
+        state = "Élő edzés befejezve"; publish(); return stats;
     }
     private void sendSpeed() {
         if (!running || workout == null) return;
@@ -235,7 +314,7 @@ public final class TreadmillService extends Service {
     }
     void stopWorkout(String message) {
         handler.removeCallbacks(tick); clearTimeout(); pendingOpcode = -1;
-        if (running) { running = false; workout = null; stopForeground(STOP_FOREGROUND_REMOVE); }
+        if (running) { running = false; workout = null; liveSession = false; liveStarted = false; liveSpeed = 0; stopForeground(STOP_FOREGROUND_REMOVE); }
         state = message; publish();
     }
     @Override public void onDestroy() { disconnect(); super.onDestroy(); }

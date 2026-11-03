@@ -37,13 +37,18 @@ public final class MainActivity extends Activity {
     private TreadmillService service;
     private TextView stateText, statusDot, selectedSummary, programCountText;
     private LinearLayout programList;
-    private Button startButton, stopButton;
+    private Button startButton, stopButton, liveButton;
     private final TreadmillService.Listener listener = (state, ready, running, step, remaining) -> runOnUiThread(() -> {
         stateText.setText(state + (running && remaining > 0 ? "\nHátralévő szakaszidő: " + (remaining / 1000) + " mp" : ""));
         statusDot.setTextColor(ready ? YELLOW : MUTED);
         stateText.setTextColor(ready ? TEXT : MUTED);
         startButton.setEnabled(ready && !running && selected != null);
         startButton.setAlpha(startButton.isEnabled() ? 1f : .45f);
+        if (liveButton != null) {
+            liveButton.setText(running && service != null && service.isLiveSession() ? "Élő edzés megnyitása" : "Élő vezérlés  ›");
+            liveButton.setEnabled(ready && (!running || service != null && service.isLiveSession()));
+            liveButton.setAlpha(liveButton.isEnabled() ? 1f : .45f);
+        }
         stopButton.setEnabled(running);
         stopButton.setVisibility(running ? View.VISIBLE : View.GONE);
         if (running) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -206,6 +211,9 @@ public final class MainActivity extends Activity {
         startButton = styledButton("Edzés indítása", this::startWorkout, true);
         startButton.setEnabled(false); startButton.setAlpha(.45f);
         actionBar.addView(startButton, new LinearLayout.LayoutParams(-1, -2));
+        liveButton = button("Élő vezérlés  ›", () -> startActivity(new Intent(this, LiveControlActivity.class)));
+        LinearLayout.LayoutParams liveMargins = new LinearLayout.LayoutParams(-1, -2);
+        liveMargins.topMargin = dp(8); actionBar.addView(liveButton, liveMargins);
         stopButton = button("Automatikus program leállítása", () -> { if (service != null) service.stopWorkout("Program leállítva. A futópadot a konzolon állítsd le."); });
         stopButton.setVisibility(View.GONE);
         LinearLayout.LayoutParams stopMargins = new LinearLayout.LayoutParams(-1, -2);
@@ -245,6 +253,12 @@ public final class MainActivity extends Activity {
         selectedSummary.setText(selected == null ? "Nincs kiválasztott program" : "Kiválasztva: " + selected.workout.name + "  •  " + selected.workout.durationLabel());
         startButton.setEnabled(selected != null && service != null && service.isReady() && !service.isRunning());
         startButton.setAlpha(startButton.isEnabled() ? 1f : .45f);
+        if (liveButton != null) {
+            boolean live = service != null && service.isLiveSession();
+            liveButton.setText(live ? "Élő edzés megnyitása" : "Élő vezérlés  ›");
+            liveButton.setEnabled(service != null && service.isReady() && (!service.isRunning() || live));
+            liveButton.setAlpha(liveButton.isEnabled() ? 1f : .45f);
+        }
     }
     private boolean hasBluetoothPermissions() {
         return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
